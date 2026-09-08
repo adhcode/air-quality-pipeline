@@ -56,9 +56,9 @@ export async function fetchAirQoReadings(gridId: string): Promise<NormalizedRead
     // each into its own NormalizedReading so downstream code (which expects
     // one parameter per reading) doesn't need to know this difference.
     const parameterValues: { parameter: string; value: number }[] = [];
-    if (m.pm2_5) parameterValues.push({ parameter: "pm25", value: m.pm2_5.value });
-    if (m.pm10) parameterValues.push({ parameter: "pm10", value: m.pm10.value });
-    if (m.no2) parameterValues.push({ parameter: "no2", value: m.no2.value });
+if (typeof m.pm2_5?.value === "number") parameterValues.push({ parameter: "pm25", value: m.pm2_5.value });
+if (typeof m.pm10?.value === "number") parameterValues.push({ parameter: "pm10", value: m.pm10.value });
+if (typeof m.no2?.value === "number") parameterValues.push({ parameter: "no2", value: m.no2.value });
 
     for (const { parameter, value } of parameterValues) {
       readings.push({
