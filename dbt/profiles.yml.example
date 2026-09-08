@@ -1,0 +1,16 @@
+# Warehouse connection config, kept separate from dbt_project.yml on purpose —
+# this file has environment-specific details and should NOT be committed with
+# real values (see .gitignore). In a team setting, each person / each CI
+# environment has its own profiles.yml or equivalent env vars.
+
+air_quality:
+  target: dev
+  outputs:
+    dev:
+      type: bigquery
+      method: service-account
+      project: your-gcp-project-id
+      dataset: air_quality
+      keyfile: /path/to/your/service-account-key.json
+      threads: 4
+      location: US

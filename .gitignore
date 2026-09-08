@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.env
+*.service-account.json
+.warehouse-watermark
+
+# dbt
+dbt/target/
+dbt/logs/
+dbt/dbt_packages/
+dbt/profiles.yml
+
+# Airflow
+airflow/logs/

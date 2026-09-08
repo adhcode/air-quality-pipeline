@@ -1,0 +1,42 @@
+version: "3.9"
+
+# Run this alongside docker-compose.yml (the app's Postgres) via:
+#   docker compose -f docker-compose.yml -f docker-compose.airflow.yml up -d
+#
+# Airflow needs its OWN metadata database (separate from your app's Postgres) —
+# that's what airflow-db is for. It stores DAG run history, task state, etc.,
+# not your air quality data.
+
+services:
+  airflow-db:
+    image: postgres:16
+    container_name: airflow-db
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes:
+      - airflow_pgdata:/var/lib/postgresql/data
+
+  airflow:
+    build:
+      context: ./airflow
+      dockerfile: Dockerfile
+    container_name: airflow-standalone
+    depends_on:
+      - airflow-db
+    environment:
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-db/airflow
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      # Lets the container run `npm` for the BashOperator tasks.
+      _PIP_ADDITIONAL_REQUIREMENTS: ""
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - .:/opt/airflow/project # the whole app, so BashOperator can `cd` into it and run npm
+    ports:
+      - "8080:8080"
+    command: standalone # single-container mode: webserver + scheduler + init, good enough for local/portfolio use
+
+volumes:
+  airflow_pgdata:

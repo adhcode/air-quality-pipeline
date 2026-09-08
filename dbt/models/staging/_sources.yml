@@ -1,0 +1,17 @@
+-- Declares the raw table(s) dbt reads FROM but doesn't manage itself
+-- (warehouse/load-to-bigquery.ts owns loading into this table). Declaring it
+-- as a "source" rather than just hardcoding the table name lets dbt track
+-- data lineage and freshness against it.
+
+version: 2
+
+sources:
+  - name: air_quality_raw
+    database: your-gcp-project-id
+    schema: air_quality
+    tables:
+      - name: processed_readings_raw
+        loaded_at_field: loaded_at
+        freshness:
+          warn_after: { count: 2, period: hour }
+          error_after: { count: 6, period: hour }

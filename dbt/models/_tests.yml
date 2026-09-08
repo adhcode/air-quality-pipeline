@@ -1,0 +1,26 @@
+# dbt tests: assertions about your data that run automatically. If any of
+# these fail, `dbt test` exits non-zero — meaning you can wire this into the
+# Airflow DAG so a data-quality regression actually stops/flags the pipeline,
+# not just a code bug.
+
+version: 2
+
+models:
+  - name: stg_readings
+    columns:
+      - name: reading_id
+        tests:
+          - unique
+          - not_null
+      - name: value_ug_m3
+        tests:
+          - not_null
+
+  - name: daily_city_air_quality
+    columns:
+      - name: city_avg_aqi
+        tests:
+          - not_null
+      - name: reading_date
+        tests:
+          - not_null

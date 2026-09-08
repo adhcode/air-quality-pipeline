@@ -1,0 +1,21 @@
+# dbt project config. This file just declares the project and where dbt
+# should look for models/tests — the actual warehouse connection details
+# live in profiles.yml (kept separate so credentials never end up in
+# version control alongside project logic).
+
+name: 'air_quality'
+version: '1.0.0'
+config-version: 2
+
+profile: 'air_quality'
+
+model-paths: ["models"]
+
+models:
+  air_quality:
+    staging:
+      +materialized: view    # staging models are cheap views, not stored tables
+    marts:
+      +materialized: table   # marts are materialized as real tables — queried
+                              # often, so worth paying the storage/compute cost
+                              # to precompute them.

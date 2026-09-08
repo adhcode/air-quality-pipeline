@@ -1,0 +1,74 @@
+// Prisma schema: this file is the single source of truth for your DB structure.
+// Run `npm run prisma:migrate` after editing this to create/update real tables.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// A physical monitoring station (from OpenAQ or another source)
+model Station {
+  id          String   @id @default(cuid())
+  sourceId    String   @unique // the ID from the external API (e.g. OpenAQ location id)
+  name        String
+  city        String?
+  country     String?
+  latitude    Float
+  longitude   Float
+  createdAt   DateTime @default(now())
+
+  rawReadings       RawReading[]
+  processedReadings ProcessedReading[]
+  anomalies         Anomaly[]
+}
+
+// Untouched payload straight from the source API — never overwritten, never deleted.
+// This is the "you can always reprocess history" safety net.
+model RawReading {
+  id         String   @id @default(cuid())
+  stationId  String
+  station    Station  @relation(fields: [stationId], references: [id])
+  parameter  String   // e.g. "pm25", "no2", "o3"
+  value      Float
+  unit       String   // unit as reported by the source, before normalization
+  measuredAt DateTime
+  source     String   // e.g. "openaq"
+  rawPayload Json     // the full original API response for this reading
+  ingestedAt DateTime @default(now())
+  processed  Boolean  @default(false) // flipped to true once run-processing.ts has handled this row
+
+  @@index([stationId, measuredAt])
+  @@index([processed])
+}
+
+// Cleaned, unit-normalized reading ready for querying/serving.
+model ProcessedReading {
+  id            String   @id @default(cuid())
+  stationId     String
+  station       Station  @relation(fields: [stationId], references: [id])
+  parameter     String
+  valueUgM3     Float    // normalized to µg/m³ for consistency across sources
+  measuredAt    DateTime
+  aqi           Int?     // computed AQI for this parameter/reading, if applicable
+  processedAt   DateTime @default(now())
+
+  @@index([stationId, parameter, measuredAt])
+}
+
+// A detected spike/anomaly at a station, for the /alerts endpoint
+model Anomaly {
+  id          String   @id @default(cuid())
+  stationId   String
+  station     Station  @relation(fields: [stationId], references: [id])
+  parameter   String
+  value       Float
+  zScore      Float
+  detectedAt  DateTime @default(now())
+  resolved    Boolean  @default(false)
+
+  @@index([stationId, resolved])
+}
