@@ -13,6 +13,21 @@ import type { NormalizedReading } from "../types.js";
 
 const OPENAQ_BASE_URL = "https://api.openaq.org/v3";
 
+const COUNTRY_CODE_TO_NAME: Record<string, string> = {
+  NG: "Nigeria",
+  ZA: "South Africa",
+  ZM: "Zambia",
+  MZ: "Mozambique",
+  GM: "Gambia",
+  BI: "Burundi",
+  ET: "Ethiopia",
+};
+
+function resolveCountryName(code: string | null): string | null {
+  if (!code) return null;
+  return COUNTRY_CODE_TO_NAME[code] ?? code;
+}
+
 interface OpenAQLocationResponse {
   results: {
     id: number;
@@ -77,7 +92,7 @@ export async function fetchOpenAQReadings(locationId: string): Promise<Normalize
       sourceId: String(location.id),
       stationName: location.name,
       city: location.locality,
-      country: location.country?.code ?? null,
+      country: resolveCountryName(location.country?.code ?? null),
       latitude: r.coordinates.latitude,
       longitude: r.coordinates.longitude,
       parameter: parameter.name,
