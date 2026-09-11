@@ -16,7 +16,7 @@ export async function runProcessing() {
   console.log(`[processing] found ${unprocessed.length} raw readings to process`);
 
   for (const raw of unprocessed) {
-       let valueUgM3: number;
+    let valueUgM3: number;
     try {
       valueUgM3 = normalizeToUgM3(raw.value, raw.unit, raw.parameter);
     } catch (err) {
@@ -30,7 +30,7 @@ export async function runProcessing() {
       continue;
     }
 
-       const aqi = raw.parameter.toLowerCase() === "pm25" ? computePm25Aqi(valueUgM3) : null;
+    const aqi = raw.parameter.toLowerCase() === "pm25" ? computePm25Aqi(valueUgM3) : null;
 
     // Fetch history BEFORE inserting the new reading — otherwise the new
     // reading would already be in this result set, comparing itself against
@@ -43,37 +43,46 @@ export async function runProcessing() {
       select: { valueUgM3: true },
     });
 
-    await prisma.processedReading.create({
-      data: {
-        stationId: raw.stationId,
-        parameter: raw.parameter,
-        valueUgM3,
-        measuredAt: raw.measuredAt,
-        aqi,
-      },
-    });
-
     const zScore = computeZScore(
       valueUgM3,
       recentHistory.map((h) => h.valueUgM3)
     );
 
-    if (Math.abs(zScore) >= ANOMALY_Z_THRESHOLD) {
-      await prisma.anomaly.create({
-        data: { stationId: raw.stationId, parameter: raw.parameter, value: valueUgM3, zScore },
+    // These three writes — save the clean reading, maybe flag an anomaly,
+    // and mark the raw row processed — must all succeed together or not at
+    // all. Without a transaction, a crash between them could leave a
+    // ProcessedReading saved but the raw row still marked unprocessed,
+    // causing a duplicate ProcessedReading the next time this runs.
+    await prisma.$transaction(async (tx) => {
+      await tx.processedReading.create({
+        data: {
+          stationId: raw.stationId,
+          parameter: raw.parameter,
+          valueUgM3,
+          measuredAt: raw.measuredAt,
+          aqi,
+        },
       });
-      console.log(`[processing] anomaly flagged: station=${raw.stationId} z=${zScore.toFixed(2)}`);
-    }
 
-    await prisma.rawReading.update({ where: { id: raw.id }, data: { processed: true } });
+      if (Math.abs(zScore) >= ANOMALY_Z_THRESHOLD) {
+        await tx.anomaly.create({
+          data: { stationId: raw.stationId, parameter: raw.parameter, value: valueUgM3, zScore },
+        });
+        console.log(`[processing] anomaly flagged: station=${raw.stationId} z=${zScore.toFixed(2)}`);
+      }
+
+      await tx.rawReading.update({ where: { id: raw.id }, data: { processed: true } });
+    });
   }
 }
 
-  runProcessing()
-    .then(() => prisma.$disconnect())
-    .catch(async (err) => {
-      console.error(err);
-      await prisma.$disconnect();
-      process.exit(1);
-    });
-
+// Same reasoning as run-ingestion.ts: this file is only ever run directly
+// via `npm run process`, so we run unconditionally rather than relying on
+// a path-comparison check that can silently fail to match.
+runProcessing()
+  .then(() => prisma.$disconnect())
+  .catch(async (err) => {
+    console.error(err);
+    await prisma.$disconnect();
+    process.exit(1);
+  });
