@@ -16,15 +16,32 @@ export async function runProcessing() {
   console.log(`[processing] found ${unprocessed.length} raw readings to process`);
 
   for (const raw of unprocessed) {
-    let valueUgM3: number;
+       let valueUgM3: number;
     try {
       valueUgM3 = normalizeToUgM3(raw.value, raw.unit, raw.parameter);
     } catch (err) {
-      console.error(`[processing] skipping reading ${raw.id}:`, (err as Error).message);
+      // This reading isn't a pollutant we know how to convert (e.g. some
+      // low-cost OpenAQ devices report temperature/humidity/particle-count
+      // metadata alongside pollution readings). The raw data stays intact
+      // in RawReading either way — we just mark it processed so it isn't
+      // retried forever, without producing a ProcessedReading for it.
+      console.log(`[processing] not a tracked pollutant, leaving raw only ${raw.id}: ${(err as Error).message}`);
+      await prisma.rawReading.update({ where: { id: raw.id }, data: { processed: true } });
       continue;
     }
 
-    const aqi = raw.parameter.toLowerCase() === "pm25" ? computePm25Aqi(valueUgM3) : null;
+       const aqi = raw.parameter.toLowerCase() === "pm25" ? computePm25Aqi(valueUgM3) : null;
+
+    // Fetch history BEFORE inserting the new reading — otherwise the new
+    // reading would already be in this result set, comparing itself against
+    // itself and skewing the z-score toward zero (making real spikes look
+    // less anomalous than they are, especially with limited history).
+    const recentHistory = await prisma.processedReading.findMany({
+      where: { stationId: raw.stationId, parameter: raw.parameter },
+      orderBy: { measuredAt: "desc" },
+      take: 30,
+      select: { valueUgM3: true },
+    });
 
     await prisma.processedReading.create({
       data: {
@@ -34,15 +51,6 @@ export async function runProcessing() {
         measuredAt: raw.measuredAt,
         aqi,
       },
-    });
-
-    // Anomaly check: compare this value against the station's recent history
-    // for the same parameter.
-    const recentHistory = await prisma.processedReading.findMany({
-      where: { stationId: raw.stationId, parameter: raw.parameter },
-      orderBy: { measuredAt: "desc" },
-      take: 30,
-      select: { valueUgM3: true },
     });
 
     const zScore = computeZScore(
